@@ -1,0 +1,19 @@
+cat > .gitignore << 'EOF'
+# Build artifacts
+build/
+*.o
+*.bin
+*.elf
+*.img
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+EOF
