@@ -16,12 +16,11 @@ void forth_set_state(int state);
 int  forth_get_base(void);
 void forth_set_base(int base);
 
-/*--- Inner Interpreter ---*/
-/* DOCOL: Code field for colon-defined words */
-void do_colon(void);
-
-/* DOLIT: Pushes the next cell as a literal number */
-void do_literal(void);
+/*--- Inner Interpreter Code Fields ---*/
+void do_colon(void);     /* For compiled words */
+void do_literal(void);   /* For numbers */
+void do_variable(void);  /* For variables */
+void do_constant(void);  /* For constants */
 
 /* Execute a word given its dictionary entry pointer */
 void forth_execute(u8 *entry);
