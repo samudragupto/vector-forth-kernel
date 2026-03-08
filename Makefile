@@ -51,14 +51,17 @@ KERNEL_C_SRCS = \
     $(KERNEL_DIR)/memory/pmm.c \
     $(KERNEL_DIR)/memory/vmm.c \
     $(KERNEL_DIR)/memory/heap.c \
+	$(KERNEL_DIR)/scheduler/task.c \
     $(KERNEL_DIR)/utils/string.c \
     $(KERNEL_DIR)/utils/stdlib.c \
     $(VM_DIR)/stack/stack.c \
     $(VM_DIR)/dictionary/dictionary.c \
     $(VM_DIR)/core/forth.c
+	
 
 KERNEL_ASM_SRCS = \
     $(KERNEL_DIR)/core/entry.asm \
+	$(KERNEL_DIR)/scheduler/switch.asm \
     $(KERNEL_DIR)/interrupts/isr.asm
 
 KERNEL_C_OBJS   = $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(KERNEL_C_SRCS)))
@@ -113,6 +116,10 @@ $(BUILD_DIR)/%.o: $(KERNEL_DIR)/memory/%.c
 	@echo "[CC]  $<"
 	@$(CC) $(CFLAGS) -c -o $@ $<
 
+$(BUILD_DIR)/%.o: $(KERNEL_DIR)/scheduler/%.c
+	@echo "[CC]  $<"
+	@$(CC) $(CFLAGS) -c -o $@ $<
+
 $(BUILD_DIR)/%.o: $(KERNEL_DIR)/utils/%.c
 	@echo "[CC]  $<"
 	@$(CC) $(CFLAGS) -c -o $@ $<
@@ -131,6 +138,9 @@ $(BUILD_DIR)/%.o: $(VM_DIR)/core/%.c
 
 # ASM compile rules
 $(BUILD_DIR)/%_asm.o: $(KERNEL_DIR)/core/%.asm
+	@echo "[ASM] $<"
+	@$(ASM) $(ASMFLAGS) -o $@ $<
+$(BUILD_DIR)/%_asm.o: $(KERNEL_DIR)/scheduler/%.asm
 	@echo "[ASM] $<"
 	@$(ASM) $(ASMFLAGS) -o $@ $<
 

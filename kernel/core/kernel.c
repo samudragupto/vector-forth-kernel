@@ -8,6 +8,7 @@
 #include "../utils/string.h"
 #include "../utils/stdlib.h"
 #include "../../vm/core/forth.h"
+#include "../scheduler/task.h"
 
 extern void timer_init(u32 frequency);
 extern void keyboard_init(void);
@@ -55,6 +56,7 @@ static void print_boot_info(u64 mem_count, e820_entry_t *mem_map) {
     vga_puts(buf);
     vga_putchar('\n');
 
+    /* Calculate total usable RAM by looping through the BIOS E820 map */
     u64 total_usable = 0;
     for (u64 i = 0; i < mem_count; i++) {
         if (mem_map[i].type == E820_USABLE) {
@@ -66,6 +68,27 @@ static void print_boot_info(u64 mem_count, e820_entry_t *mem_map) {
     ultoa(total_usable / (1024 * 1024), buf, 10);
     vga_puts(buf);
     vga_puts(" MB\n");
+}
+
+/*=============================================================================
+ * Optimized Background Task
+ * This proves multitasking without causing keyboard lag!
+ *=============================================================================*/
+void background_worker(void) {
+    char spinner[] = {'|', '/', '-', '\\'};
+    int i = 0;
+    u64 last_tick = 0;
+
+    while(1) {
+        /* Only update the screen every 10 ticks (0.1 seconds) */
+        if (kernel_ticks > last_tick + 10) {
+            vga_put_at(79, 0, spinner[i], VGA_COLOR_YELLOW);
+            i = (i + 1) % 4;
+            last_tick = kernel_ticks;
+        }
+        /* Instantly yield back to Forth so the keyboard never lags */
+        yield();
+    }
 }
 
 __attribute__((section(".text.entry")))
@@ -103,8 +126,15 @@ void kernel_main(u64 mem_count, e820_entry_t *mem_map) {
     sti();
     vga_puts("[+] Interrupts enabled\n");
 
+    vga_puts("[*] Starting Multitasking Scheduler...\n");
+    scheduler_init();
+    
+    /* Start the background thread! */
+    task_create(background_worker);
+    vga_puts("[+] Background thread spawned\n");
+
     vga_puts("\n========================================\n");
-    vga_puts("Phase 1 Complete - Higher-Half Kernel\n");
+    vga_puts("Phase 3 Complete - Multitasking OS\n");
     vga_puts("Entering Phase 2: Forth VM\n");
     vga_puts("========================================\n");
 

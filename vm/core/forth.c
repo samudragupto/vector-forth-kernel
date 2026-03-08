@@ -9,6 +9,7 @@
 #include "../../kernel/core/kernel.h"
 #include "../../kernel/memory/heap.h"
 #include "../../kernel/memory/pmm.h"
+#include "../../kernel/scheduler/task.h"
 
 /*=============================================================================
  * Interpreter State
@@ -81,10 +82,8 @@ void forth_execute(u8 *entry) {
         ip_set((u64 *)dict_get_param_field(entry));
         forth_inner();
     } else if (code == (cell_t)do_variable) {
-        /* VARIABLE pushes its parameter field address */
         ds_push((i64)(u64)dict_get_param_field(entry));
     } else if (code == (cell_t)do_constant) {
-        /* CONSTANT pushes the value stored in its parameter field */
         ds_push((i64)*dict_get_param_field(entry));
     } else {
         native_fn_t fn = (native_fn_t)code;
@@ -222,7 +221,6 @@ static void w_semicolon(void) {
     forth_state = STATE_INTERPRET;
 }
 
-/* CREATE: Make a dictionary header. Execution returns its PFA. */
 static void w_create(void) {
     char name[64];
     if (!parse_word(name, sizeof(name))) return;
@@ -230,13 +228,11 @@ static void w_create(void) {
     dict_set_code(do_variable);
 }
 
-/* VARIABLE: CREATE + ALLOT 1 cell */
 static void w_variable(void) {
     w_create();
-    dict_comma(0); /* Initialize with 0 */
+    dict_comma(0); 
 }
 
-/* CONSTANT: CREATE + DOCON + Store TOS */
 static void w_constant(void) {
     char name[64];
     if (!parse_word(name, sizeof(name))) return;
@@ -266,11 +262,10 @@ static void w_see(void) {
 
     cell_t *code = dict_get_code_field(entry);
     vga_puts(": ");
-    
     u8 nlen = dict_get_name_len(entry); 
     char *nname = dict_get_name(entry);
     for (u8 i = 0; i < nlen; i++) {
-        vga_putchar(nname[i]); 
+        vga_putchar(nname[i]);
     }
     vga_putchar(' ');
 
@@ -325,7 +320,24 @@ static void w_i(void)      { ds_push((i64)rs_peek()); }
 static void w_do(void)     { dict_comma((cell_t)rt_do); ds_push((i64)(u64)dict_here); }
 static void w_loop(void)   { u64 d = (u64)ds_pop(); dict_comma((cell_t)rt_loop); dict_comma(d); }
 
-/* System */
+/*=============================================================================
+ * SYSTEM / UTILITY PRIMITIVES
+ *=============================================================================*/
+static u8 *fork_target_xt = NULL;
+
+static void forth_thread_wrapper(void) {
+    if (fork_target_xt) {
+        forth_execute(fork_target_xt);
+    }
+}
+
+static void w_fork(void) {
+    u8 *xt = (u8 *)(u64)ds_pop();
+    fork_target_xt = xt;
+    task_t *new_task = task_create(forth_thread_wrapper);
+    ds_push(new_task->pid);
+}
+
 static void w_words(void)  { dict_list_words(); }
 static void w_bye(void)    { vga_puts("\nSystem halted.\n"); cli(); while (1) hlt(); }
 static void w_clear(void)  { vga_clear(); }
@@ -341,9 +353,34 @@ static void w_status(void) {
     vga_puts("=== System Status ===\n");
     vga_puts("Ticks:       "); ultoa(kernel_ticks, buf, 10); vga_puts(buf); vga_putchar('\n');
     vga_puts("Dict HERE:   "); vga_put_hex((u64)dict_here); vga_putchar('\n');
-    vga_puts("Dict used:   "); ultoa((u64)(dict_here - dict_base), buf, 10); vga_puts(buf); vga_puts(" B\n");
     vga_puts("Stack depth: "); itoa((int)ds_depth(), buf, 10); vga_puts(buf); vga_putchar('\n');
     vga_puts("State:       "); vga_puts(forth_state ? "COMPILE" : "INTERPRET"); vga_putchar('\n');
+}
+
+static void w_dump(void) {
+    i64 count = ds_pop();
+    u8 *addr = (u8 *)ds_pop();
+    char buf[8];
+
+    for (i64 i = 0; i < count; i++) {
+        if (i % 16 == 0) {
+            vga_put_hex((u64)(addr + i));
+            vga_puts(": ");
+        }
+        utoa(addr[i], buf, 16);
+        if (addr[i] < 16) vga_putchar('0');
+        vga_puts(buf);
+        vga_putchar(' ');
+        if (i % 16 == 15) {
+            vga_puts(" | ");
+            for (int j = 15; j >= 0; j--) {
+                char c = addr[i - j];
+                vga_putchar((c >= 32 && c < 127) ? c : '.');
+            }
+            vga_putchar('\n');
+        }
+    }
+    if (count % 16 != 0) vga_putchar('\n');
 }
 
 static void register_primitives(void) {
@@ -379,8 +416,11 @@ static void register_primitives(void) {
     dict_add_primitive("TYPE", w_type, 0); dict_add_primitive(".\"", w_dot_quote, F_IMMEDIATE);
     dict_add_primitive("(", w_paren, F_IMMEDIATE);
     dict_add_primitive(":", w_colon, 0); dict_add_primitive(";", w_semicolon, F_IMMEDIATE);
-    dict_add_primitive("VARIABLE", w_variable, 0); dict_add_primitive("CONSTANT", w_constant, 0);
+    
+    dict_add_primitive("VARIABLE", w_variable, 0);
+    dict_add_primitive("CONSTANT", w_constant, 0);
     dict_add_primitive("CREATE", w_create, 0);
+    
     dict_add_primitive("IMMEDIATE", w_immediate, 0); dict_add_primitive("'", w_tick, 0);
     dict_add_primitive("EXECUTE", w_execute, 0); dict_add_primitive("SEE", w_see, 0);
     dict_add_primitive("IF", w_if, F_IMMEDIATE); dict_add_primitive("ELSE", w_else, F_IMMEDIATE);
@@ -390,6 +430,9 @@ static void register_primitives(void) {
     dict_add_primitive("DO", w_do, F_IMMEDIATE); dict_add_primitive("LOOP", w_loop, F_IMMEDIATE);
     dict_add_primitive("I", w_i, 0); dict_add_primitive("WORDS", w_words, 0);
     dict_add_primitive("STATUS", w_status, 0);
+    dict_add_primitive("DUMP", w_dump, 0);
+    dict_add_primitive("FORK", w_fork, 0);
+    dict_add_primitive("YIELD", yield, 0);
     dict_add_primitive("CLEAR", w_clear, 0); dict_add_primitive("BYE", w_bye, 0);
     dict_add_primitive("BASE", w_base, 0); dict_add_primitive("DECIMAL", w_decimal, 0);
     dict_add_primitive("HEX", w_hex, 0);
@@ -427,6 +470,9 @@ void forth_init(void) {
     vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 }
 
+/*=============================================================================
+ * REPL (Read-Eval-Print Loop)
+ *=============================================================================*/
 void forth_run(void) {
     input_pos = 0;
     vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK); vga_puts("> ");
@@ -435,17 +481,37 @@ void forth_run(void) {
     while (1) {
         if (keyboard_available()) {
             char c = keyboard_getchar();
+            
             if (c == '\n') {
-                input_buffer[input_pos] = '\0'; vga_putchar('\n');
-                if (input_pos > 0) forth_eval(input_buffer);
+                input_buffer[input_pos] = '\0'; 
+                vga_putchar('\n');
+                
+                if (input_pos > 0) {
+                    forth_eval(input_buffer);
+                }
+                
                 input_pos = 0;
                 vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
                 vga_puts(forth_state == STATE_COMPILE ? "| " : "> ");
                 vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
             }
-            else if (c == '\b') { if (input_pos > 0) input_pos--; }
-            else if (c >= 32 && input_pos < INPUT_BUF_SIZE - 1) input_buffer[input_pos++] = c;
+            else if (c == '\b') { 
+                if (input_pos > 0) {
+                    input_pos--;
+                    vga_putchar('\b'); vga_putchar(' '); vga_putchar('\b');
+                } 
+            }
+            else if (c >= 32 && input_pos < INPUT_BUF_SIZE - 1) {
+                vga_putchar(c); 
+                input_buffer[input_pos++] = c;
+            }
+        } else {
+            /* 1. Give background tasks a chance to run */
+            yield();
+            
+            /* 2. Put CPU to sleep until the next hardware interrupt! 
+             *    This stops QEMU from using 100% CPU and prevents input lag. */
+            hlt();
         }
-        hlt();
     }
 }

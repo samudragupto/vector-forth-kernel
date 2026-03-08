@@ -143,18 +143,12 @@ void keyboard_handler_c(void) {
 
     /* Ctrl+key combinations */
     if (ctrl_pressed) {
-        if (c >= 'a' && c <= 'z') c -= 96;  /* Ctrl+A = 1, etc. */
+        if (c >= 'a' && c <= 'z') c -= 96;  
         else if (c >= 'A' && c <= 'Z') c -= 64;
     }
 
-    /* Put in buffer */
+    /* Put in buffer - DO NOT PRINT TO SCREEN HERE */
     kbd_buffer_put(c);
-
-    /* Echo to screen */
-    vga_putchar(c);
-
-    /* Debug: echo to serial */
-    serial_putchar(SERIAL_COM1, c);
 }
 
 /*--- Initialize keyboard ---*/
