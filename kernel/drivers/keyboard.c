@@ -2,7 +2,7 @@
  * PS/2 Keyboard Driver - IRQ1
  *=============================================================================*/
 
-#include "../core/kernel.h"
+#include "keyboard.h"
 #include "vga.h"
 #include "serial.h"
 
@@ -21,24 +21,31 @@ static volatile u8 ctrl_pressed  = 0;
 static volatile u8 alt_pressed   = 0;
 static volatile u8 caps_lock     = 0;
 
-/*--- US keyboard layout (scancode set 1) ---*/
+/*--- US keyboard layout + Numpad ---*/
 static const char scancode_to_ascii[] = {
-    0, 0,                              /* 0x00, 0x01 (ESC) */
-    '1','2','3','4','5','6','7','8','9','0',  /* 0x02-0x0B */
-    '-','=', '\b',                     /* 0x0C-0x0E */
-    '\t',                              /* 0x0F */
-    'q','w','e','r','t','y','u','i','o','p',  /* 0x10-0x19 */
-    '[',']', '\n',                     /* 0x1A-0x1C */
-    0,                                 /* 0x1D (Left Ctrl) */
-    'a','s','d','f','g','h','j','k','l',      /* 0x1E-0x26 */
-    ';','\'', '`',                     /* 0x27-0x29 */
-    0,                                 /* 0x2A (Left Shift) */
-    '\\',                             /* 0x2B */
-    'z','x','c','v','b','n','m',       /* 0x2C-0x32 */
-    ',','.','/',                       /* 0x33-0x35 */
-    0, '*',                            /* 0x36 (Right Shift), 0x37 */
-    0, ' ',                            /* 0x38 (Left Alt), 0x39 (Space) */
-    0,                                 /* 0x3A (Caps Lock) */
+    0, 0,                              
+    '1','2','3','4','5','6','7','8','9','0',  
+    '-','=', '\b',                     
+    '\t',                              
+    'q','w','e','r','t','y','u','i','o','p',  
+    '[',']', '\n',                     
+    0,                                 
+    'a','s','d','f','g','h','j','k','l',      
+    ';','\'', '`',                     
+    0,                                 
+    '\\',                             
+    'z','x','c','v','b','n','m',       
+    ',','.','/',                       
+    0, '*',                            
+    0, ' ',                            
+    0,                                 
+    /* 0x3B - 0x44 (F1-F10 keys) */
+    0,0,0,0,0,0,0,0,0,0,               
+    0, 0,                              /* 0x45 NumLock, 0x46 ScrollLock */
+    '7','8','9', '-',                  /* 0x47-0x4A Numpad 7,8,9,- */
+    '4','5','6', '+',                  /* 0x4B-0x4E Numpad 4,5,6,+ */
+    '1','2','3',                       /* 0x4F-0x51 Numpad 1,2,3 */
+    '0','.'                            /* 0x52-0x53 Numpad 0,. */
 };
 
 static const char scancode_to_ascii_shift[] = {
@@ -58,6 +65,13 @@ static const char scancode_to_ascii_shift[] = {
     0, '*',
     0, ' ',
     0,
+    /* F1-F10 */
+    0,0,0,0,0,0,0,0,0,0,
+    0, 0,
+    '7','8','9', '-',
+    '4','5','6', '+',
+    '1','2','3',
+    '0','.'
 };
 
 #define SCANCODE_TABLE_SIZE (sizeof(scancode_to_ascii) / sizeof(scancode_to_ascii[0]))
@@ -122,7 +136,7 @@ void keyboard_handler_c(void) {
     if (caps_lock && c >= 'a' && c <= 'z') {
         c -= 32;
     } else if (caps_lock && c >= 'A' && c <= 'Z' && !shift_pressed) {
-        /* caps lock with shift = lowercase */
+        c += 32;
     }
 
     if (c == 0) return;

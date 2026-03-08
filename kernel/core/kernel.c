@@ -7,6 +7,7 @@
 #include "../memory/heap.h"
 #include "../utils/string.h"
 #include "../utils/stdlib.h"
+#include "../../vm/core/forth.h"
 
 extern void timer_init(u32 frequency);
 extern void keyboard_init(void);
@@ -28,7 +29,6 @@ void kernel_panic(const char *msg) {
     while (1) { hlt(); }
 }
 
-/* Forward declaration so print_boot_info can take its address */
 void kernel_main(u64 mem_count, e820_entry_t *mem_map);
 
 static void print_boot_info(u64 mem_count, e820_entry_t *mem_map) {
@@ -37,7 +37,6 @@ static void print_boot_info(u64 mem_count, e820_entry_t *mem_map) {
     vga_puts("Vector Forth Kernel v" VFK_VERSION_STRING "\n");
     vga_puts("========================================\n");
 
-    /* Print kernel_main address to prove higher-half */
     vga_puts("kernel_main at: ");
     vga_put_hex((u64)&kernel_main);
     vga_putchar('\n');
@@ -105,12 +104,16 @@ void kernel_main(u64 mem_count, e820_entry_t *mem_map) {
     vga_puts("[+] Interrupts enabled\n");
 
     vga_puts("\n========================================\n");
-    vga_puts("Phase 1 complete - Higher-Half Kernel\n");
+    vga_puts("Phase 1 Complete - Higher-Half Kernel\n");
+    vga_puts("Entering Phase 2: Forth VM\n");
     vga_puts("========================================\n");
 
-    serial_puts(SERIAL_COM1, "Phase 1 complete (higher-half)\n");
+    serial_puts(SERIAL_COM1, "Starting Forth VM...\n");
 
-    while (1) {
-        hlt();
-    }
+    /* Initialize and run the Forth VM */
+    forth_init();
+    forth_run();
+
+    /* Never reaches here */
+    while (1) { hlt(); }
 }
