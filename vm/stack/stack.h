@@ -22,4 +22,9 @@ u64  rs_peek(void);
 u64  rs_depth(void);
 void rs_clear(void);
 
+/*--- Instruction Pointer (for inner interpreter) ---*/
+void     ip_set(u64 *addr);
+u64     *ip_get(void);
+u64      ip_fetch_advance(void);   /* Fetch *IP, then IP++ */
+
 #endif

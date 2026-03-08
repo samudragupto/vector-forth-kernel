@@ -19,17 +19,14 @@ void ds_push(i64 v) {
 
 i64 ds_pop(void) {
     if (dsp <= 0) {
-        vga_puts(" Data Stack Underflow!\n");
+        vga_puts(" Stack Underflow!\n");
         return 0;
     }
     return ds[--dsp];
 }
 
 i64 ds_peek(void) {
-    if (dsp <= 0) {
-        vga_puts(" Stack Empty!\n");
-        return 0;
-    }
+    if (dsp <= 0) return 0;
     return ds[dsp - 1];
 }
 
@@ -70,14 +67,16 @@ static int rsp_idx = 0;
 
 void rs_push(u64 v) {
     if (rsp_idx >= RETURN_STACK_SIZE) {
-        kernel_panic("Return Stack Overflow!");
+        vga_puts(" Return Stack Overflow!\n");
+        return;
     }
     rs[rsp_idx++] = v;
 }
 
 u64 rs_pop(void) {
     if (rsp_idx <= 0) {
-        kernel_panic("Return Stack Underflow!");
+        vga_puts(" Return Stack Underflow!\n");
+        return 0;
     }
     return rs[--rsp_idx];
 }
@@ -93,4 +92,28 @@ u64 rs_depth(void) {
 
 void rs_clear(void) {
     rsp_idx = 0;
+}
+
+/*=============================================================================
+ * Instruction Pointer (IP) - Heart of the Inner Interpreter
+ *
+ * IP points to the next cell in the parameter field to execute.
+ * NEXT:  fetch the cell at *IP, advance IP, jump to it.
+ * DOCOL: push current IP to RS, set IP to param field, do NEXT.
+ * EXIT:  pop RS into IP, do NEXT.
+ *=============================================================================*/
+static u64 *ip = NULL;
+
+void ip_set(u64 *addr) {
+    ip = addr;
+}
+
+u64 *ip_get(void) {
+    return ip;
+}
+
+u64 ip_fetch_advance(void) {
+    u64 val = *ip;
+    ip++;
+    return val;
 }

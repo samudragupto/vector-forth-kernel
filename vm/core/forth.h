@@ -3,25 +3,27 @@
 
 #include "../../kernel/core/kernel.h"
 
-/* State of the interpreter */
+/* Interpreter states */
 #define STATE_INTERPRET 0
 #define STATE_COMPILE   1
 
-/* Initialize Forth VM and register all primitives */
 void forth_init(void);
-
-/* Start the interactive Forth REPL */
 void forth_run(void);
-
-/* Interpret a single line of input */
 void forth_eval(const char *line);
 
-/* Get/Set interpreter state */
 int  forth_get_state(void);
 void forth_set_state(int state);
-
-/* Get/Set numeric base */
 int  forth_get_base(void);
 void forth_set_base(int base);
+
+/*--- Inner Interpreter ---*/
+/* DOCOL: Code field for colon-defined words */
+void do_colon(void);
+
+/* DOLIT: Pushes the next cell as a literal number */
+void do_literal(void);
+
+/* Execute a word given its dictionary entry pointer */
+void forth_execute(u8 *entry);
 
 #endif
