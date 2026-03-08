@@ -1,5 +1,5 @@
 ;=============================================================================
-; Kernel 64-bit Entry Stub
+; Kernel 64-bit Entry Stub (Higher Half)
 ;=============================================================================
 
 [BITS 64]
@@ -7,21 +7,19 @@
 global _start
 extern kernel_main
 
+; Higher-half base
+KERNEL_VIRT_BASE    equ 0xFFFF800000000000
+
 section .text.entry
 _start:
-    ; 1. Clear interrupts
     cli
 
-    ; 2. Print 'E' 'N' in bright green to prove we made it to 64-bit Assembly
-    mov rax, 0xB8004
-    mov word [rax], 0x2F45  ; 'E'
-    mov word [rax+2], 0x2F4E ; 'N'
-
-    ; 3. Clear RFLAGS
+    ; Clear RFLAGS
     push    0
     popf
 
-    ; 4. Call C code
+    ; RDI and RSI already set by bootloader trampoline
+    ; Call the C kernel
     call    kernel_main
 
 .hang:

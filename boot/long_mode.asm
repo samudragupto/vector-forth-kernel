@@ -1,5 +1,5 @@
 ;=============================================================================
-; Stage 2 Bootloader - Transition to Long Mode and load kernel
+; Stage 2 Bootloader - Transition to Long Mode
 ;=============================================================================
 
 [BITS 16]
@@ -7,6 +7,9 @@
 
 STAGE2_SECTORS      equ 32
 dw  0x5646
+
+; Higher-half base address
+KERNEL_VIRT_BASE    equ 0xFFFF800000000000
 
 stage2_entry:
     cli
@@ -35,26 +38,32 @@ stage2_entry:
 
     jmp     GDT_CODE_32:protected_mode_entry
 
+;-----------------------------------------------------------------------------
+; Detect memory via E820
+;-----------------------------------------------------------------------------
 detect_memory:
-    mov     di, 0x6008              
-    xor     ebx, ebx               
-    xor     bp, bp                  
-    mov     edx, 0x534D4150         
+    mov     di, 0x6008
+    xor     ebx, ebx
+    xor     bp, bp
+    mov     edx, 0x534D4150
 .e820_loop:
     mov     eax, 0xE820
-    mov     ecx, 24                 
+    mov     ecx, 24
     int     0x15
-    jc      .e820_done              
-    cmp     eax, 0x534D4150         
+    jc      .e820_done
+    cmp     eax, 0x534D4150
     jne     .e820_done
     inc     bp
     add     di, 24
-    test    ebx, ebx               
+    test    ebx, ebx
     jnz     .e820_loop
 .e820_done:
-    mov     [0x6000], bp            
+    mov     [0x6000], bp
     ret
 
+;-----------------------------------------------------------------------------
+; Enable A20
+;-----------------------------------------------------------------------------
 enable_a20:
     mov     ax, 0x2401
     int     0x15
@@ -92,16 +101,17 @@ enable_a20:
     jz      .a20_wait_output
     ret
 
-KERNEL_LOAD_SEGMENT equ 0x0000
-KERNEL_LOAD_TEMP    equ 0x7E00      
-KERNEL_PHYS_ADDR    equ 0x100000    
-KERNEL_SECTORS      equ 256         
-KERNEL_START_LBA    equ 34          
+;-----------------------------------------------------------------------------
+; Load kernel from disk
+;-----------------------------------------------------------------------------
+KERNEL_PHYS_ADDR    equ 0x100000
+KERNEL_SECTORS      equ 256
+KERNEL_START_LBA    equ 34
 
 load_kernel:
     mov     si, msg_loading
     call    print16
-    mov     ax, 0x1000              
+    mov     ax, 0x1000
     mov     es, ax
     xor     bx, bx
     mov     cx, KERNEL_SECTORS
@@ -110,21 +120,20 @@ load_kernel:
 .load_loop:
     push    cx
     push    eax
-    mov     word [dap_s2 + 2], 1    
-    mov     word [dap_s2 + 4], bx   
-    mov     word [dap_s2 + 6], es   
-    mov     dword [dap_s2 + 8], eax 
-    mov     dword [dap_s2 + 12], 0  
+    mov     word [dap_s2 + 2], 1
+    mov     word [dap_s2 + 4], bx
+    mov     word [dap_s2 + 6], es
+    mov     dword [dap_s2 + 8], eax
+    mov     dword [dap_s2 + 12], 0
     mov     si, dap_s2
     mov     ah, 0x42
     mov     dl, [boot_drive_s2]
     int     0x13
     jc      .load_error
-
     pop     eax
     pop     cx
-    inc     eax                     
-    add     bx, 512                 
+    inc     eax
+    add     bx, 512
     jnc     .no_overflow
     mov     dx, es
     add     dx, 0x1000
@@ -132,7 +141,6 @@ load_kernel:
     xor     bx, bx
 .no_overflow:
     loop    .load_loop
-
     mov     si, msg_loaded
     call    print16
     ret
@@ -143,6 +151,9 @@ load_kernel:
     cli
     hlt
 
+;-----------------------------------------------------------------------------
+; 16-bit print
+;-----------------------------------------------------------------------------
 print16:
     pusha
 .loop:
@@ -157,6 +168,9 @@ print16:
     popa
     ret
 
+;-----------------------------------------------------------------------------
+; Data
+;-----------------------------------------------------------------------------
 boot_drive_s2:  db 0
 msg_stage2:     db 'Stage 2', 13, 10, 0
 msg_loading:    db 'Loading kernel...', 13, 10, 0
@@ -165,12 +179,12 @@ msg_load_err:   db 'Load error!', 13, 10, 0
 
 align 4
 dap_s2:
-    db  0x10                        
-    db  0                           
-    dw  1                           
-    dw  0                           
-    dw  0                           
-    dq  0                           
+    db  0x10
+    db  0
+    dw  1
+    dw  0
+    dw  0
+    dq  0
 
 ;=============================================================================
 ; 32-BIT PROTECTED MODE
@@ -183,51 +197,63 @@ protected_mode_entry:
     mov     fs, ax
     mov     gs, ax
     mov     ss, ax
-    mov     esp, 0x90000            
+    mov     esp, 0x90000
 
-    ; Copy Kernel
-    mov     esi, 0x10000            
-    mov     edi, KERNEL_PHYS_ADDR   
-    mov     ecx, (KERNEL_SECTORS * 512) / 4  
+    ; Copy kernel from temp buffer to 1MB
+    mov     esi, 0x10000
+    mov     edi, KERNEL_PHYS_ADDR
+    mov     ecx, (KERNEL_SECTORS * 512) / 4
     rep     movsd
 
-    ; Call paging setup (safely stored at bottom of file now)
+    ; Setup paging
     call    setup_paging
 
+    ; Enable PAE
     mov     eax, cr4
-    or      eax, (1 << 5)           
+    or      eax, (1 << 5)
     mov     cr4, eax
 
-    mov     ecx, 0xC0000080         
+    ; Enable Long Mode
+    mov     ecx, 0xC0000080
     rdmsr
-    or      eax, (1 << 8)           
+    or      eax, (1 << 8)
     wrmsr
 
+    ; Enable Paging
     mov     eax, cr0
-    or      eax, (1 << 31)          
+    or      eax, (1 << 31)
     mov     cr0, eax
 
-    jmp     GDT_CODE_64:long_mode_entry
+    ; Jump to 64-bit!
+    jmp     GDT_CODE_64:long_mode_trampoline
 
 ;=============================================================================
-; 64-BIT LONG MODE
+; 64-BIT LONG MODE (Trampoline)
 ;=============================================================================
 [BITS 64]
-long_mode_entry:
+long_mode_trampoline:
+    ; Setup segments
     mov     ax, GDT_DATA_64
     mov     ds, ax
     mov     es, ax
     mov     fs, ax
     mov     gs, ax
     mov     ss, ax
-    mov     rsp, 0x90000
+
+    ; Load 64-bit stack pointer safely
+    mov     rax, KERNEL_VIRT_BASE + 0x90000
+    mov     rsp, rax
     cld
 
-    movzx   rdi, word [0x6000]      
-    mov     rsi, 0x6008             
+    ; Load memory map count (RDI) safely
+    mov     rax, KERNEL_VIRT_BASE + 0x6000
+    movzx   rdi, word [rax]
 
-    ; Jump to entry.asm (_start -> kernel_main)
-    mov     rax, 0x100000
+    ; Load memory map pointer (RSI) safely
+    mov     rsi, KERNEL_VIRT_BASE + 0x6008
+
+    ; Jump to kernel at higher-half virtual address!
+    mov     rax, KERNEL_VIRT_BASE + 0x100000
     call    rax
 
     cli
@@ -235,9 +261,9 @@ long_mode_entry:
     hlt
     jmp     .hang
 
-; ============================================================================
-; INCLUDES PLACED SAFELY AT THE END
-; ============================================================================
+;=============================================================================
+; INCLUDES (at the bottom, never executed by fall-through)
+;=============================================================================
 %include "gdt.asm"
 %include "paging.asm"
 

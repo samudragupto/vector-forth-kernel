@@ -28,13 +28,28 @@ void kernel_panic(const char *msg) {
     while (1) { hlt(); }
 }
 
+/* Forward declaration so print_boot_info can take its address */
+void kernel_main(u64 mem_count, e820_entry_t *mem_map);
+
 static void print_boot_info(u64 mem_count, e820_entry_t *mem_map) {
     char buf[32];
 
     vga_puts("Vector Forth Kernel v" VFK_VERSION_STRING "\n");
     vga_puts("========================================\n");
 
+    /* Print kernel_main address to prove higher-half */
+    vga_puts("kernel_main at: ");
+    vga_put_hex((u64)&kernel_main);
+    vga_putchar('\n');
+
+    vga_puts("VGA buffer at:  ");
+    vga_put_hex(VGA_MEMORY);
+    vga_putchar('\n');
+
     serial_puts(SERIAL_COM1, "Vector Forth Kernel v" VFK_VERSION_STRING "\n");
+    serial_puts(SERIAL_COM1, "kernel_main at: ");
+    serial_put_hex(SERIAL_COM1, (u64)&kernel_main);
+    serial_puts(SERIAL_COM1, "\n");
 
     vga_puts("Memory map entries: ");
     itoa((int)mem_count, buf, 10);
@@ -53,6 +68,7 @@ static void print_boot_info(u64 mem_count, e820_entry_t *mem_map) {
     vga_puts(buf);
     vga_puts(" MB\n");
 }
+
 __attribute__((section(".text.entry")))
 void kernel_main(u64 mem_count, e820_entry_t *mem_map) {
     vga_init();
@@ -89,10 +105,10 @@ void kernel_main(u64 mem_count, e820_entry_t *mem_map) {
     vga_puts("[+] Interrupts enabled\n");
 
     vga_puts("\n========================================\n");
-    vga_puts("Phase 1 complete - Kernel foundation ready\n");
+    vga_puts("Phase 1 complete - Higher-Half Kernel\n");
     vga_puts("========================================\n");
 
-    serial_puts(SERIAL_COM1, "Phase 1 complete\n");
+    serial_puts(SERIAL_COM1, "Phase 1 complete (higher-half)\n");
 
     while (1) {
         hlt();

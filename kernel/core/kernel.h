@@ -1,12 +1,10 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-/*--- GCC freestanding headers (always available) ---*/
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
 
-/*--- Standard type aliases ---*/
 typedef uint8_t   u8;
 typedef uint16_t  u16;
 typedef uint32_t  u32;
@@ -16,22 +14,35 @@ typedef int16_t   i16;
 typedef int32_t   i32;
 typedef int64_t   i64;
 
-/*--- Kernel version ---*/
 #define VFK_VERSION_MAJOR   0
 #define VFK_VERSION_MINOR   1
 #define VFK_VERSION_PATCH   0
 #define VFK_VERSION_STRING  "0.1.0"
 
-/*--- Memory constants ---*/
-#define KERNEL_PHYS_BASE    0x100000ULL
-#define PAGE_SIZE           4096ULL
+/*--- Higher-Half Virtual Memory Layout ---*/
+#define KERNEL_VIRT_BASE        0xFFFF800000000000ULL
+#define KERNEL_PHYS_BASE        0x100000ULL
 
-/*--- VGA constants ---*/
-#define VGA_MEMORY          0xB8000
-#define VGA_WIDTH           80
-#define VGA_HEIGHT          25
+/*--- Convert physical to virtual and back ---*/
+#define PHYS_TO_VIRT(addr)      ((u64)(addr) + KERNEL_VIRT_BASE)
+#define VIRT_TO_PHYS(addr)      ((u64)(addr) - KERNEL_VIRT_BASE)
 
-/*--- Port I/O ---*/
+/*--- VGA is at physical 0xB8000, mapped to higher-half ---*/
+#define VGA_PHYS_MEMORY         0xB8000ULL
+#define VGA_MEMORY              (KERNEL_VIRT_BASE + VGA_PHYS_MEMORY)
+#define VGA_WIDTH               80
+#define VGA_HEIGHT              25
+
+/*--- Memory regions (all in higher-half virtual space) ---*/
+#define PMM_BITMAP_PHYS         0x200000ULL
+#define PMM_BITMAP_VIRT         (KERNEL_VIRT_BASE + PMM_BITMAP_PHYS)
+
+#define HEAP_PHYS_START         0x300000ULL
+#define HEAP_VIRT_START         (KERNEL_VIRT_BASE + HEAP_PHYS_START)
+
+#define PAGE_SIZE               4096ULL
+
+/*--- Port I/O (unchanged, these use CPU ports not memory) ---*/
 static inline void outb(u16 port, u8 val) {
     __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
 }
@@ -66,7 +77,6 @@ static inline void io_wait(void) {
     outb(0x80, 0);
 }
 
-/*--- CPU control ---*/
 static inline void cli(void) {
     __asm__ volatile ("cli");
 }
@@ -99,10 +109,8 @@ static inline void invlpg(void *addr) {
     __asm__ volatile ("invlpg (%0)" : : "r"(addr) : "memory");
 }
 
-/*--- Kernel panic ---*/
 void kernel_panic(const char *msg);
 
-/*--- E820 memory map entry ---*/
 typedef struct __attribute__((packed)) {
     u64 base;
     u64 length;
@@ -113,4 +121,4 @@ typedef struct __attribute__((packed)) {
 #define E820_USABLE     1
 #define E820_RESERVED   2
 
-#endif /* KERNEL_H */
+#endif
