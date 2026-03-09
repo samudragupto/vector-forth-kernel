@@ -39,7 +39,8 @@ VPATH = $(KERNEL_DIR)/core:$(KERNEL_DIR)/drivers:$(KERNEL_DIR)/interrupts:\
 KERNEL_C_SRCS = \
     kernel.c vga.c serial.c timer.c keyboard.c ata.c \
     idt.c isr.c irq.c pmm.c vmm.c heap.c task.c \
-    string.c stdlib.c stack.c dictionary.c forth.c block_device.c
+    string.c stdlib.c stack.c dictionary.c forth.c block_device.c\
+	block_device.c filesystem.c
 
 KERNEL_ASM_SRCS = \
     entry.asm switch.asm isr.asm

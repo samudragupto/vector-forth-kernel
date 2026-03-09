@@ -11,6 +11,7 @@
 #include "../../kernel/memory/pmm.h"
 #include "../../kernel/scheduler/task.h"
 #include "../../fs/block_device.h"
+#include "../../fs/filesystem.h"
 
 /*=============================================================================
  * Interpreter State
@@ -342,9 +343,12 @@ static void w_fork(void) {
  * FILESYSTEM (BLOCK) PRIMITIVES
  *=============================================================================*/
 static void w_block(void) {
-    u32 blk = (u32)ds_pop();
-    u8 *addr = block_get(blk);
-    ds_push((i64)(u64)addr);
+    u32 blk_num = (u32)ds_pop();
+    block_t *blk = block_get(blk_num);
+    
+    /* Push the address of the 1008-byte DATA section to the stack, 
+     * skipping over the 16-byte header so the user can write freely. */
+    ds_push((i64)(u64)blk->data);
 }
 
 static void w_update(void) {
@@ -398,6 +402,65 @@ static void w_dump(void) {
         }
     }
     if (count % 16 != 0) vga_putchar('\n');
+}
+
+/*=============================================================================
+ * VISUAL BLOCK EDITOR
+ * Screen is 15 lines of 64 characters (960 bytes)
+ *=============================================================================*/
+static void run_editor(u32 block_num) {
+    block_t *blk = block_get(block_num);
+    int cursor = 0;
+
+    while (1) {
+        /* Draw the Editor UI */
+        vga_clear();
+        vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
+        vga_puts("=== VECTOR FORTH BLOCK EDITOR === [Block ");
+        char bbuf[10]; itoa(block_num, bbuf, 10); vga_puts(bbuf);
+        vga_puts("] === (Press ESC to Save/Exit) ===\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+        /* Draw 15 lines of 64 characters */
+        for (int i = 0; i < 960; i++) {
+            if (i % 64 == 0 && i != 0) vga_putchar('\n');
+            
+            /* Highlight the cursor position */
+            if (i == cursor) vga_set_color(VGA_COLOR_BLACK, VGA_COLOR_LIGHT_GREY);
+            
+            char c = blk->data[i];
+            if (c < 32 || c > 126) c = '.'; /* Draw dots for empty space */
+            vga_putchar(c);
+            
+            if (i == cursor) vga_set_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        }
+
+        /* Handle Input */
+        while (!keyboard_available()) yield();
+        char key = keyboard_getchar();
+
+        if (key == 27) { /* ESC key */
+            break;
+        } else if (key == '\b') {
+            if (cursor > 0) { cursor--; blk->data[cursor] = 0; }
+        } else if (key == '\n') {
+            /* Move cursor to next line */
+            cursor = (cursor / 64 + 1) * 64;
+            if (cursor >= 960) cursor = 959;
+        } else if (key >= 32 && key <= 126) {
+            blk->data[cursor] = key;
+            if (cursor < 959) cursor++;
+        }
+    }
+
+    block_update();
+    block_flush();
+    vga_clear();
+}
+
+static void w_edit(void) {
+    u32 blk = (u32)ds_pop();
+    run_editor(blk);
 }
 
 static void register_primitives(void) {
@@ -457,6 +520,8 @@ static void register_primitives(void) {
     dict_add_primitive("BLOCK",  w_block,  0);
     dict_add_primitive("UPDATE", w_update, 0);
     dict_add_primitive("FLUSH",  w_flush,  0);
+
+    dict_add_primitive("EDIT",   w_edit,   0);
 }
 
 void forth_eval(const char *line) {

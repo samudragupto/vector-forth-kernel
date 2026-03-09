@@ -10,6 +10,7 @@
 #include "../../vm/core/forth.h"
 #include "../scheduler/task.h"
 #include "../../fs/block_device.h"
+#include "../../fs/filesystem.h"
 
 extern void timer_init(u32 frequency);
 extern void keyboard_init(void);
@@ -123,7 +124,7 @@ void kernel_main(u64 mem_count, e820_entry_t *mem_map) {
     keyboard_init();
     vga_puts("[+] Keyboard initialized\n");
 
-    vga_puts("[*] Initializing Block Filesystem...\n"); block_init();
+    vga_puts("[*] Initializing Block Filesystem...\n"); block_init();fs_init();
 
     vga_puts("[*] Enabling interrupts...\n");
     sti();
