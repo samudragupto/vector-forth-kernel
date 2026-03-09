@@ -10,6 +10,7 @@
 #include "../../kernel/memory/heap.h"
 #include "../../kernel/memory/pmm.h"
 #include "../../kernel/scheduler/task.h"
+#include "../../fs/block_device.h"
 
 /*=============================================================================
  * Interpreter State
@@ -337,6 +338,22 @@ static void w_fork(void) {
     task_t *new_task = task_create(forth_thread_wrapper);
     ds_push(new_task->pid);
 }
+/*=============================================================================
+ * FILESYSTEM (BLOCK) PRIMITIVES
+ *=============================================================================*/
+static void w_block(void) {
+    u32 blk = (u32)ds_pop();
+    u8 *addr = block_get(blk);
+    ds_push((i64)(u64)addr);
+}
+
+static void w_update(void) {
+    block_update();
+}
+
+static void w_flush(void) {
+    block_flush();
+}
 
 static void w_words(void)  { dict_list_words(); }
 static void w_bye(void)    { vga_puts("\nSystem halted.\n"); cli(); while (1) hlt(); }
@@ -436,6 +453,10 @@ static void register_primitives(void) {
     dict_add_primitive("CLEAR", w_clear, 0); dict_add_primitive("BYE", w_bye, 0);
     dict_add_primitive("BASE", w_base, 0); dict_add_primitive("DECIMAL", w_decimal, 0);
     dict_add_primitive("HEX", w_hex, 0);
+        /* Filesystem */
+    dict_add_primitive("BLOCK",  w_block,  0);
+    dict_add_primitive("UPDATE", w_update, 0);
+    dict_add_primitive("FLUSH",  w_flush,  0);
 }
 
 void forth_eval(const char *line) {

@@ -1,5 +1,5 @@
 #=============================================================================
-# Vector Forth Kernel - Build System (Phase 1 + 2)
+# Vector Forth Kernel - Build System (Phase 1-4)
 #=============================================================================
 
 ASM         = nasm
@@ -10,26 +10,18 @@ OBJCOPY     = objcopy
 BOOT_DIR    = boot
 KERNEL_DIR  = kernel
 VM_DIR      = vm
+FS_DIR      = fs
 BUILD_DIR   = build
 
 GCC_INCLUDE = $(shell $(CC) -print-file-name=include)
 
 ASMFLAGS    = -f elf64
-CFLAGS      = -ffreestanding \
-              -nostdlib \
-              -nostdinc \
-              -isystem $(GCC_INCLUDE) \
-              -fno-builtin \
-              -fno-stack-protector \
-              -fno-pic \
-              -fno-pie \
-              -mno-red-zone \
-              -mno-mmx -mno-sse -mno-sse2 \
-              -mcmodel=large \
-              -Wall -Wextra -Werror \
-              -O2 -g \
-              -std=c11 \
-              -I kernel
+CFLAGS      = -ffreestanding -nostdlib -nostdinc -isystem $(GCC_INCLUDE) \
+              -fno-builtin -fno-stack-protector -fno-pic -fno-pie \
+              -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
+              -mcmodel=large -Wall -Wextra -Werror -O2 -g -std=c11 \
+              -I kernel -I vm -I fs
+
 LDFLAGS     = -nostdlib -T linker.ld -z max-page-size=0x1000
 
 BOOT_BIN    = $(BUILD_DIR)/boot.bin
@@ -38,34 +30,22 @@ KERNEL_ELF  = $(BUILD_DIR)/kernel.elf
 KERNEL_BIN  = $(BUILD_DIR)/kernel.bin
 OS_IMAGE    = $(BUILD_DIR)/forthos.img
 
-# Phase 1 + Phase 2 C sources
+# Tell Make where to search for .c and .asm files
+VPATH = $(KERNEL_DIR)/core:$(KERNEL_DIR)/drivers:$(KERNEL_DIR)/interrupts:\
+        $(KERNEL_DIR)/memory:$(KERNEL_DIR)/scheduler:$(KERNEL_DIR)/utils:\
+        $(VM_DIR)/core:$(VM_DIR)/stack:$(VM_DIR)/dictionary:$(FS_DIR)
+
+# Phase 1-4 C sources (JUST filenames, no paths needed because of VPATH)
 KERNEL_C_SRCS = \
-    $(KERNEL_DIR)/core/kernel.c \
-    $(KERNEL_DIR)/drivers/vga.c \
-    $(KERNEL_DIR)/drivers/serial.c \
-    $(KERNEL_DIR)/drivers/timer.c \
-    $(KERNEL_DIR)/drivers/keyboard.c \
-    $(KERNEL_DIR)/interrupts/idt.c \
-    $(KERNEL_DIR)/interrupts/isr.c \
-    $(KERNEL_DIR)/interrupts/irq.c \
-    $(KERNEL_DIR)/memory/pmm.c \
-    $(KERNEL_DIR)/memory/vmm.c \
-    $(KERNEL_DIR)/memory/heap.c \
-	$(KERNEL_DIR)/scheduler/task.c \
-    $(KERNEL_DIR)/utils/string.c \
-    $(KERNEL_DIR)/utils/stdlib.c \
-    $(VM_DIR)/stack/stack.c \
-    $(VM_DIR)/dictionary/dictionary.c \
-    $(VM_DIR)/core/forth.c
-	
+    kernel.c vga.c serial.c timer.c keyboard.c ata.c \
+    idt.c isr.c irq.c pmm.c vmm.c heap.c task.c \
+    string.c stdlib.c stack.c dictionary.c forth.c block_device.c
 
 KERNEL_ASM_SRCS = \
-    $(KERNEL_DIR)/core/entry.asm \
-	$(KERNEL_DIR)/scheduler/switch.asm \
-    $(KERNEL_DIR)/interrupts/isr.asm
+    entry.asm switch.asm isr.asm
 
-KERNEL_C_OBJS   = $(patsubst %.c, $(BUILD_DIR)/%.o, $(notdir $(KERNEL_C_SRCS)))
-KERNEL_ASM_OBJS = $(patsubst %.asm, $(BUILD_DIR)/%_asm.o, $(notdir $(KERNEL_ASM_SRCS)))
+KERNEL_C_OBJS   = $(patsubst %.c, $(BUILD_DIR)/%.o, $(KERNEL_C_SRCS))
+KERNEL_ASM_OBJS = $(patsubst %.asm, $(BUILD_DIR)/%_asm.o, $(KERNEL_ASM_SRCS))
 KERNEL_OBJS     = $(KERNEL_C_OBJS) $(KERNEL_ASM_OBJS)
 
 .PHONY: all clean run run-debug dirs
@@ -77,7 +57,7 @@ dirs:
 
 $(OS_IMAGE): $(BOOT_BIN) $(STAGE2_BIN) $(KERNEL_BIN)
 	@echo "[IMG] Creating disk image..."
-	@dd if=/dev/zero of=$@ bs=512 count=2880 2>/dev/null
+	@dd if=/dev/zero of=$@ bs=512 count=20480 2>/dev/null
 	@dd if=$(BOOT_BIN) of=$@ conv=notrunc bs=512 count=1 2>/dev/null
 	@dd if=$(STAGE2_BIN) of=$@ conv=notrunc bs=512 seek=1 2>/dev/null
 	@dd if=$(KERNEL_BIN) of=$@ conv=notrunc bs=512 seek=34 2>/dev/null
@@ -99,52 +79,13 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	@echo "[BIN] $@"
 	@$(OBJCOPY) -O binary $< $@
 
-# C compile rules
-$(BUILD_DIR)/%.o: $(KERNEL_DIR)/core/%.c
+# Unified C compile rule
+$(BUILD_DIR)/%.o: %.c
 	@echo "[CC]  $<"
 	@$(CC) $(CFLAGS) -c -o $@ $<
 
-$(BUILD_DIR)/%.o: $(KERNEL_DIR)/drivers/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BUILD_DIR)/%.o: $(KERNEL_DIR)/interrupts/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BUILD_DIR)/%.o: $(KERNEL_DIR)/memory/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BUILD_DIR)/%.o: $(KERNEL_DIR)/scheduler/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BUILD_DIR)/%.o: $(KERNEL_DIR)/utils/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BUILD_DIR)/%.o: $(VM_DIR)/stack/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BUILD_DIR)/%.o: $(VM_DIR)/dictionary/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-$(BUILD_DIR)/%.o: $(VM_DIR)/core/%.c
-	@echo "[CC]  $<"
-	@$(CC) $(CFLAGS) -c -o $@ $<
-
-# ASM compile rules
-$(BUILD_DIR)/%_asm.o: $(KERNEL_DIR)/core/%.asm
-	@echo "[ASM] $<"
-	@$(ASM) $(ASMFLAGS) -o $@ $<
-$(BUILD_DIR)/%_asm.o: $(KERNEL_DIR)/scheduler/%.asm
-	@echo "[ASM] $<"
-	@$(ASM) $(ASMFLAGS) -o $@ $<
-
-$(BUILD_DIR)/%_asm.o: $(KERNEL_DIR)/interrupts/%.asm
+# Unified ASM compile rule
+$(BUILD_DIR)/%_asm.o: %.asm
 	@echo "[ASM] $<"
 	@$(ASM) $(ASMFLAGS) -o $@ $<
 
