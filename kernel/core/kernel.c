@@ -11,6 +11,8 @@
 #include "../scheduler/task.h"
 #include "../../fs/block_device.h"
 #include "../../fs/filesystem.h"
+#include "../drivers/pci/pci.h"
+#include "../drivers/net/e1000.h"
 
 extern void timer_init(u32 frequency);
 extern void keyboard_init(void);
@@ -125,6 +127,12 @@ void kernel_main(u64 mem_count, e820_entry_t *mem_map) {
     vga_puts("[+] Keyboard initialized\n");
 
     vga_puts("[*] Initializing Block Filesystem...\n"); block_init();fs_init();
+
+    vga_puts("[*] Initializing PCI Bus...\n"); 
+    pci_init();
+    
+    vga_puts("[*] Initializing Network Card...\n"); 
+    e1000_init();
 
     vga_puts("[*] Enabling interrupts...\n");
     sti();

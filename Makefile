@@ -33,11 +33,13 @@ OS_IMAGE    = $(BUILD_DIR)/forthos.img
 # Tell Make where to search for .c and .asm files
 VPATH = $(KERNEL_DIR)/core:$(KERNEL_DIR)/drivers:$(KERNEL_DIR)/interrupts:\
         $(KERNEL_DIR)/memory:$(KERNEL_DIR)/scheduler:$(KERNEL_DIR)/utils:\
-        $(VM_DIR)/core:$(VM_DIR)/stack:$(VM_DIR)/dictionary:$(FS_DIR)
+        $(VM_DIR)/core:$(VM_DIR)/stack:$(VM_DIR)/dictionary:$(FS_DIR)\
+		$(KERNEL_DIR)/drivers/pci:$(KERNEL_DIR)/drivers/net
 
 # Phase 1-4 C sources (JUST filenames, no paths needed because of VPATH)
 KERNEL_C_SRCS = \
     kernel.c vga.c serial.c timer.c keyboard.c ata.c \
+	pci.c e1000.c \
     idt.c isr.c irq.c pmm.c vmm.c heap.c task.c \
     string.c stdlib.c stack.c dictionary.c forth.c block_device.c\
 	block_device.c filesystem.c
@@ -92,10 +94,12 @@ $(BUILD_DIR)/%_asm.o: %.asm
 
 # Run
 run: $(OS_IMAGE)
-	@echo "[RUN] Starting QEMU..."
+	@echo "[RUN] Starting QEMU with Networking..."
 	@env -i DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY) PATH=/usr/bin:/bin \
 		/usr/bin/qemu-system-x86_64 \
 		-drive file=$(OS_IMAGE),format=raw \
+		-netdev user,id=n0 \
+		-device e1000,netdev=n0,mac=52:54:00:12:34:56 \
 		-serial stdio \
 		-m 128M \
 		-no-reboot \
@@ -106,6 +110,8 @@ run-debug: $(OS_IMAGE)
 	@env -i DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY) PATH=/usr/bin:/bin \
 		/usr/bin/qemu-system-x86_64 \
 		-drive file=$(OS_IMAGE),format=raw \
+		-netdev user,id=n0 \
+		-device e1000,netdev=n0,mac=52:54:00:12:34:56 \
 		-serial stdio \
 		-m 128M \
 		-no-reboot \
