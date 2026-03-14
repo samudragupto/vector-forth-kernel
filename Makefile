@@ -94,7 +94,7 @@ $(BUILD_DIR)/%_asm.o: %.asm
 
 # Run
 run: $(OS_IMAGE)
-	@echo "[RUN] Starting QEMU with AVX-512 Support..."
+	@echo "[RUN] Starting QEMU with AVX-128 Support..."
 	@env -i DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY) PATH=/usr/bin:/bin \
 		/usr/bin/qemu-system-x86_64 \
 		-drive file=$(OS_IMAGE),format=raw \

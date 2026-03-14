@@ -19,6 +19,6 @@ void avx_init(void) {
     cr4 |= (1 << 9) | (1 << 10);
     __asm__ volatile ("mov %0, %%cr4" :: "r"(cr4));
 
-    vga_puts("[+] SIMD Vector Registers Unlocked!\n");
-    serial_puts(SERIAL_COM1, "SIMD: XMM/YMM Enabled via CR4.\n");
+    vga_puts("[+] 128-bit XMM Vector Registers Unlocked!\n");
+    serial_puts(SERIAL_COM1, "SIMD: 128-bit SSE2 hardware enabled.\n");
 }

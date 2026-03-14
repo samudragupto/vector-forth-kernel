@@ -352,6 +352,34 @@ static void w_see(void) {
     vga_puts(";\n");
 }
 
+static void w_load(void) {
+    u32 blk_num = (u32)ds_pop();
+    block_t *blk = block_get(blk_num);
+    
+    /* Save the current parser state so we can return to the terminal 
+     * after the disk file finishes executing */
+    const char *saved_ptr = parse_ptr;
+    
+    /* Copy the 1008-byte block payload into a safe string buffer */
+    char buf[1024];
+    for (int i = 0; i < 1008; i++) {
+        buf[i] = blk->data[i];
+        /* Treat uninitialized block data as spaces */
+        if (buf[i] < 32 || buf[i] > 126) buf[i] = ' '; 
+    }
+    buf[1008] = '\0'; /* Null terminate it */
+
+    /* Tell the VM to evaluate the disk buffer! */
+    vga_puts("\n[Loading Block ");
+    char nbuf[10]; itoa(blk_num, nbuf, 10); vga_puts(nbuf);
+    vga_puts("...]\n");
+    
+    forth_eval(buf);
+    
+    /* Restore parser to the keyboard terminal */
+    parse_ptr = saved_ptr;
+}
+
 /* Control Flow */
 static void rt_branch(void)  { ip_set((u64 *)ip_fetch_advance()); }
 static void rt_0branch(void) { u64 t = ip_fetch_advance(); if (ds_pop() == 0) ip_set((u64 *)t); }
@@ -454,6 +482,8 @@ static void w_dump(void) {
     }
     if (count % 16 != 0) vga_putchar('\n');
 }
+
+
 
 /*=============================================================================
  * VISUAL BLOCK EDITOR
@@ -576,6 +606,7 @@ static void register_primitives(void) {
 
     dict_add_primitive("VDUP", w_vdup, 0);
     dict_add_primitive("V+",   w_vplus, 0);
+    dict_add_primitive("LOAD", w_load, 0);
 }
 
 void forth_eval(const char *line) {
