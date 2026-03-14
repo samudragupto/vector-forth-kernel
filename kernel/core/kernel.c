@@ -13,6 +13,7 @@
 #include "../../fs/filesystem.h"
 #include "../drivers/pci/pci.h"
 #include "../drivers/net/e1000.h"
+#include "avx.h"
 
 extern void timer_init(u32 frequency);
 extern void keyboard_init(void);
@@ -143,6 +144,11 @@ void kernel_main(u64 mem_count, e820_entry_t *mem_map) {
     vga_puts("[*] Starting Multitasking Scheduler...\n");
     scheduler_init();
     
+    avx_init();
+
+    vga_puts("\n========================================\n");
+    vga_puts("Phase 6 Complete - AVX-512 Activated\n");
+
     /* Start the background thread! */
     task_create(background_worker);
     vga_puts("[+] Background thread spawned\n");

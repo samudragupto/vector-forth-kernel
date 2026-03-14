@@ -133,6 +133,57 @@ static void forth_inner(void) {
 }
 
 /*=============================================================================
+ * SIMD VECTOR PRIMITIVES
+ *=============================================================================*/
+
+/* VDUP: Uses SSE2 to copy 1 value into 2 stack slots instantly */
+__attribute__((target("sse2")))
+static void w_vdup(void) {
+    if (ds_depth() < 1) return;
+    i64 top = ds_pop();
+    
+    /* 16-byte aligned memory for 128-bit XMM spill */
+    __attribute__((aligned(16))) i64 vec_out[2];
+
+    __asm__ volatile (
+        "movq %1, %%xmm0\n\t"         /* Move 64-bit value to XMM0 */
+        "punpcklqdq %%xmm0, %%xmm0\n\t" /* Unpack/duplicate it into both halves */
+        "movdqa %%xmm0, %0\n\t"       /* Spill 128-bits back to RAM */
+        : "=m" (vec_out)
+        : "r" (top)
+        : "xmm0", "memory"
+    );
+
+    ds_push(vec_out[0]);
+    ds_push(vec_out[1]);
+}
+
+/* V+: Pops 4 items, does 2 simultaneous additions in 1 cycle, pushes 2 results */
+__attribute__((target("sse2")))
+static void w_vplus(void) {
+    if (ds_depth() < 4) { vga_puts(" Stack Underflow for V+\n"); return; }
+    
+    __attribute__((aligned(16))) i64 v_a[2];
+    __attribute__((aligned(16))) i64 v_b[2];
+    
+    v_b[1] = ds_pop(); v_b[0] = ds_pop();
+    v_a[1] = ds_pop(); v_a[0] = ds_pop();
+
+    __asm__ volatile (
+        "movdqa %1, %%xmm1\n\t"       /* Load first vector */
+        "movdqa %2, %%xmm2\n\t"       /* Load second vector */
+        "paddq %%xmm2, %%xmm1\n\t"    /* Add them simultaneously */
+        "movdqa %%xmm1, %0\n\t"       /* Spill to memory */
+        : "=m" (v_a)
+        : "m" (v_a), "m" (v_b)
+        : "xmm1", "xmm2", "memory"
+    );
+
+    ds_push(v_a[0]);
+    ds_push(v_a[1]);
+}
+
+/*=============================================================================
  * PRIMITIVES
  *=============================================================================*/
 static void w_dup(void)  { ds_push(ds_peek()); }
@@ -522,6 +573,9 @@ static void register_primitives(void) {
     dict_add_primitive("FLUSH",  w_flush,  0);
 
     dict_add_primitive("EDIT",   w_edit,   0);
+
+    dict_add_primitive("VDUP", w_vdup, 0);
+    dict_add_primitive("V+",   w_vplus, 0);
 }
 
 void forth_eval(const char *line) {

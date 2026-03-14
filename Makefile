@@ -18,9 +18,9 @@ GCC_INCLUDE = $(shell $(CC) -print-file-name=include)
 ASMFLAGS    = -f elf64
 CFLAGS      = -ffreestanding -nostdlib -nostdinc -isystem $(GCC_INCLUDE) \
               -fno-builtin -fno-stack-protector -fno-pic -fno-pie \
-              -mno-red-zone -mno-mmx -mno-sse -mno-sse2 \
+              -mno-red-zone \
               -mcmodel=large -Wall -Wextra -Werror -O2 -g -std=c11 \
-              -I kernel -I vm -I fs
+              -I kernel -I vm -I fs -I network
 
 LDFLAGS     = -nostdlib -T linker.ld -z max-page-size=0x1000
 
@@ -41,8 +41,8 @@ KERNEL_C_SRCS = \
     kernel.c vga.c serial.c timer.c keyboard.c ata.c \
 	pci.c e1000.c \
     idt.c isr.c irq.c pmm.c vmm.c heap.c task.c \
-    string.c stdlib.c stack.c dictionary.c forth.c block_device.c\
-	block_device.c filesystem.c
+    string.c stdlib.c stack.c dictionary.c forth.c \
+    block_device.c filesystem.c avx.c
 
 KERNEL_ASM_SRCS = \
     entry.asm switch.asm isr.asm
@@ -94,12 +94,13 @@ $(BUILD_DIR)/%_asm.o: %.asm
 
 # Run
 run: $(OS_IMAGE)
-	@echo "[RUN] Starting QEMU with Networking..."
+	@echo "[RUN] Starting QEMU with AVX-512 Support..."
 	@env -i DISPLAY=$(DISPLAY) XAUTHORITY=$(XAUTHORITY) PATH=/usr/bin:/bin \
 		/usr/bin/qemu-system-x86_64 \
 		-drive file=$(OS_IMAGE),format=raw \
 		-netdev user,id=n0 \
 		-device e1000,netdev=n0,mac=52:54:00:12:34:56 \
+		-cpu max \
 		-serial stdio \
 		-m 128M \
 		-no-reboot \
